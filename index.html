@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Driffield Cadet Tracking Map</title>
+    <!-- Leaflet CSS for Map Styling -->
+    <link rel="stylesheet" href="https://unpkg.com" />
+    <!-- MQTT Library to receive live coordinates -->
+    <script src="https://unpkg.com"></script>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; font-family: sans-serif; }
+        #map { height: 100%; width: 100%; }
+        #status-bar {
+            position: absolute; top: 10px; right: 10px; z-index: 1000;
+            background: rgba(255,255,255,0.9); padding: 8px 12px;
+            border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            font-size: 12px; font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="status-bar">Connecting to Network...</div>
+    <div id="map"></div>
+
+    <!-- Leaflet JS for Map Logic -->
+    <script src="https://unpkg.com"></script>
+    <script>
+        // 1. Initialize the map centered on Driffield Cadet Training Area
+        const map = L.map('map').setView([54.0145, -0.4720], 14);
+
+        // Load 100% Free OpenStreetMap Tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Keep track of active markers on the screen
+        const markers = {};
+        const statusBar = document.getElementById('status-bar');
+
+        // 2. Connect to the public free HiveMQ MQTT Broker over Secure WebSockets
+        const client = mqtt.connect('wss://://hivemq.com');
+
+        client.on('connect', () => {
+            statusBar.innerText = "🟢 System Active";
+            statusBar.style.color = "green";
+            // Subscribe to both your hardware trackers and mobile staff topics
+            client.subscribe('driffield/cadets/+/location', (err) => {
+                if (err) console.error("Subscription error", err);
+            });
+        });
+
+        client.on('offline', () => {
+            statusBar.innerText = "🔴 System Offline";
+            statusBar.style.color = "red";
+        });
+
+        // 3. Listen for incoming GPS coordinates
+        client.on('message', (topic, message) => {
+            try {
+                const data = JSON.parse(message.toString());
+                const topicParts = topic.split('/');
+                const deviceId = topicParts[2]; // Extracts unique ID from topic
+                
+                const lat = data.lat;
+                const lon = data.lon;
+                const name = data.name || deviceId;
+                const type = data.type || "Tracker"; // Distinguish Staff vs Cadet Hardware
+                const lastUpdated = new Date().toLocaleTimeString();
+
+                if (lat && lon) {
+                    // Custom marker styling based on role
+                    const markerColor = (type === "Staff") ? "blue" : "red";
+                    
+                    if (markers[deviceId]) {
+                        // Update existing device position
+                        markers[deviceId].setLatLng([lat, lon]);
+                        markers[deviceId].getPopup().setContent(`<b>${name}</b> (${type})<br>Last Seen: ${lastUpdated}`);
+                    } else {
+                        // Create a new marker if device just turned on
+                        markers[deviceId] = L.marker([lat, lon]).addTo(map)
+                            .bindPopup(`<b>${name}</b> (${type})<br>Last Seen: ${lastUpdated}`);
+                    }
+                }
+            } catch (e) {
+                console.error("Error parsing incoming JSON data", e);
+            }
+        });
+    </script>
+</body>
+</html>
