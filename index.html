@@ -35,12 +35,12 @@
         const markers = {};
         const statusBar = document.getElementById('status-bar');
 
-        // INPUT YOUR THINGSPEAK CREDENTIALS HERE:
-        const channelId = "3526815"; 
-        const readApiKey = "RHMDATRBIO029GKN"; 
+        // INPUT YOUR THINGSPEAK CHANNEL ID HERE:
+        const channelId = "YOUR_CHANNEL_ID"; 
+        const readApiKey = "9KF2ESSBQN9PODSC"; // Your validated public read key
 
         function fetchTrackerData() {
-            const url = `https://thingspeak.com{channelId}/feeds.json?api_key=${readApiKey}&results=10`;
+            const url = `https://thingspeak.com{channelId}/feeds.json?api_key=${readApiKey}&results=5`;
 
             fetch(url)
                 .then(response => response.json())
@@ -51,8 +51,9 @@
 
                     // Read the location feeds
                     data.feeds.forEach(feed => {
-                        const lat = parseFloat(feed.field1);
-                        const lon = parseFloat(feed.field2);
+                        // FIX: Pulling native geographic metadata from ThingSpeak map entries
+                        const lat = parseFloat(feed.latitude);
+                        const lon = parseFloat(feed.longitude);
                         const name = feed.field3 || "Unknown Tag";
                         const type = feed.field4 || "Tracker";
                         const deviceId = name.replace(/\s+/g, '-').toLowerCase();
@@ -64,7 +65,7 @@
                             } else {
                                 markers[deviceId] = L.marker([lat, lon]).addTo(map)
                                     .bindPopup(`<b>${name}</b> (${type})<br>Last Seen: ${lastUpdated}`);
-                                map.panTo([lat, lon]); // Centers map on the active pin
+                                map.panTo([lat, lon]); // Automatically moves the map focus onto the active pin
                             }
                         }
                     });
@@ -76,7 +77,7 @@
                 });
         }
 
-        // Run instantly on launch, then update every 15 seconds
+        // Run instantly on launch, then update automatically every 15 seconds
         fetchTrackerData();
         setInterval(fetchTrackerData, 15000);
     </script>
