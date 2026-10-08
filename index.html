@@ -35,9 +35,9 @@
         const markers = {};
         const statusBar = document.getElementById('status-bar');
 
-        // INPUT YOUR THINGSPEAK CHANNEL ID HERE:
+        // Your validated ThingSpeak Credentials
         const channelId = "3526815"; 
-        const readApiKey = "RHMDATRBIO029GKN"; // Your validated public read key
+        const readApiKey = "RHMDATRBIO029GKN"; 
 
         function fetchTrackerData() {
             const url = `https://thingspeak.com{channelId}/feeds.json?api_key=${readApiKey}&results=5`;
@@ -51,9 +51,9 @@
 
                     // Read the location feeds
                     data.feeds.forEach(feed => {
-                        // FIX: Pulling native geographic metadata from ThingSpeak map entries
-                        const lat = parseFloat(feed.latitude);
-                        const lon = parseFloat(feed.longitude);
+                        // Read coordinates directly from data fields matching your successful test link
+                        const lat = parseFloat(feed.field1);
+                        const lon = parseFloat(feed.field2);
                         const name = feed.field3 || "Unknown Tag";
                         const type = feed.field4 || "Tracker";
                         const deviceId = name.replace(/\s+/g, '-').toLowerCase();
@@ -65,7 +65,7 @@
                             } else {
                                 markers[deviceId] = L.marker([lat, lon]).addTo(map)
                                     .bindPopup(`<b>${name}</b> (${type})<br>Last Seen: ${lastUpdated}`);
-                                map.panTo([lat, lon]); // Automatically moves the map focus onto the active pin
+                                map.panTo([lat, lon]); // Centers map onto the active pin
                             }
                         }
                     });
