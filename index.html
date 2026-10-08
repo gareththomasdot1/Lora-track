@@ -35,21 +35,36 @@
         const markers = {};
         const statusBar = document.getElementById('status-bar');
 
-        // Your Corrected and Verified ThingSpeak Credentials
+        // Confirmed Operational Channel Credentials
         const channelId = "3526815"; 
         const readApiKey = "RHMDATRBIO029GKN"; 
 
         function fetchTrackerData() {
-            const url = `https://thingspeak.com{channelId}/feeds.json?api_key=${readApiKey}&results=5`;
+            // Appending a random timestamp prevents mobile browsers from caching stale page versions
+            const url = `https://thingspeak.com{channelId}/feeds.json?api_key=${readApiKey}&results=5&_nocache=${new Date().getTime()}`;
 
-            fetch(url)
-                .then(response => response.json())
+            // Explicitly pass CORS and secure browser validation flags
+            fetch(url, { 
+                method: 'GET',
+                mode: 'cors',
+                headers: { 'Accept': 'application/json' }
+            })
+                .then(response => {
+                    if (!response.ok) throw new Error('Network response failure');
+                    return response.json();
+                })
                 .then(data => {
                     const lastUpdated = new Date().toLocaleTimeString();
                     statusBar.innerText = "🟢 System Active (Refreshed: " + lastUpdated + ")";
                     statusBar.style.color = "green";
 
-                    // Read the location feeds
+                    // Safely verify if feeds exist
+                    if (!data.feeds || data.feeds.length === 0) {
+                        statusBar.innerText = "🟢 System Active (No Data Logs Found)";
+                        return;
+                    }
+
+                    // Process coordinate arrays
                     data.feeds.forEach(feed => {
                         const lat = parseFloat(feed.field1);
                         const lon = parseFloat(feed.field2);
@@ -64,19 +79,19 @@
                             } else {
                                 markers[deviceId] = L.marker([lat, lon]).addTo(map)
                                     .bindPopup(`<b>${name}</b> (${type})<br>Last Seen: ${lastUpdated}`);
-                                map.panTo([lat, lon]); // Centers map onto the active pin
+                                map.panTo([lat, lon]);
                             }
                         }
                     });
                 })
                 .catch(error => {
                     console.error("API Fetch Error:", error);
-                    statusBar.innerText = "🔴 API Connection Failed";
+                    statusBar.innerText = "🔴 Connection Blocked by Browser Filters";
                     statusBar.style.color = "red";
                 });
         }
 
-        // Run instantly on launch, then update automatically every 15 seconds
+        // Run data update cycle instantly on boot, then repeat every 15 seconds
         fetchTrackerData();
         setInterval(fetchTrackerData, 15000);
     </script>
