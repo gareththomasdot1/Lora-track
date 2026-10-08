@@ -35,7 +35,7 @@
         const markers = {};
         const statusBar = document.getElementById('status-bar');
 
-        // Verified Active Channel Configuration
+        // Your Corrected and Verified ThingSpeak Credentials
         const channelId = "3526815"; 
         const readApiKey = "RHMDATRBIO029GKN"; 
 
@@ -51,7 +51,6 @@
 
                     // Read the location feeds
                     data.feeds.forEach(feed => {
-                        // Core Fix: Read coordinates directly from data fields matching your successful test link
                         const lat = parseFloat(feed.field1);
                         const lon = parseFloat(feed.field2);
                         const name = feed.field3 || "Unknown Tag";
