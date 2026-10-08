@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Driffield Cadet Tracking Map</title>
-    <!-- Leaflet CSS for Map Styling -->
     <link rel="stylesheet" href="https://unpkg.com" />
-    <!-- Fixed MQTT Client Library -->
     <script src="https://unpkg.com"></script>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; width: 100%; font-family: sans-serif; }
@@ -16,7 +14,6 @@
             background: rgba(255,255,255,0.9); padding: 8px 12px;
             border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
             font-size: 12px; font-weight: bold;
-            transition: all 0.3s ease;
         }
     </style>
 </head>
@@ -25,78 +22,73 @@
     <div id="status-bar" style="color: orange;">⏳ Initializing Connection...</div>
     <div id="map"></div>
 
-    <!-- Leaflet JS for Map Logic -->
     <script src="https://unpkg.com"></script>
     <script>
-        // 1. Initialize the map centered on Driffield Cadet Training Area
         const map = L.map('map').setView([54.0145, -0.4720], 14);
 
-        // Load 100% Free OpenStreetMap Tiles
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
+            maxZoom: 19, attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
         const markers = {};
         const statusBar = document.getElementById('status-bar');
 
-        // 2. Connect to the reliable public Meshtastic MQTT cluster
-        // Using explicit WebSockets port 443 via TLS for absolute browser compatibility
+        // Connect to the public Meshtastic broker over secure port 443
         const client = mqtt.connect('wss://mqtt.meshtastic.org:443', {
             clientId: 'driffield_viewer_' + Math.random().toString(16).substr(2, 8),
-            keepalive: 60,
-            reconnectPeriod: 1000
+            keepalive: 60, reconnectPeriod: 1000
         });
 
         client.on('connect', () => {
             statusBar.innerText = "🟢 Map Active (Waiting for Tags)";
             statusBar.style.color = "green";
             
-            // Subscribes to your private team channel space
-            client.subscribe('driffield/cadets/+/location', (err) => {
-                if (err) console.error("MQTT Subscription failed", err);
-            });
+            // Subscribe to BOTH upcoming Meshtastic hardware and current OwnTracks phone apps
+            client.subscribe('driffield/cadets/+/location');
+            client.subscribe('owntracks/driffield/#');
         });
 
-        client.on('reconnect', () => {
-            statusBar.innerText = "🟡 Reconnecting...";
-            statusBar.style.color = "orange";
-        });
-
-        client.on('error', (err) => {
-            console.error("MQTT Connection Error: ", err);
-            statusBar.innerText = "🔴 Connection Error";
-            statusBar.style.color = "red";
-        });
-
-        // 3. Listen for incoming GPS data packages
         client.on('message', (topic, message) => {
             try {
                 const data = JSON.parse(message.toString());
                 const topicParts = topic.split('/');
-                const deviceId = topicParts[2]; 
                 
-                const lat = data.lat;
-                const lon = data.lon;
-                const name = data.name || deviceId;
-                const type = data.type || "Tracker"; 
-                const lastUpdated = new Date().toLocaleTimeString();
+                let lat, lon, name, type, deviceId;
+
+                // Handle OwnTracks App Format
+                if (topicParts[0] === 'owntracks') {
+                    deviceId = topicParts[2] || 'staff_phone';
+                    lat = data.lat;
+                    lon = data.lon;
+                    name = "Staff: " + (deviceId.toUpperCase());
+                    type = "Staff";
+                } 
+                // Handle Meshtastic Hardware Format
+                else {
+                    deviceId = topicParts[2];
+                    lat = data.lat;
+                    lon = data.lon;
+                    name = data.name || deviceId;
+                    type = "Cadet";
+                }
 
                 if (lat && lon) {
+                    const lastUpdated = new Date().toLocaleTimeString();
                     statusBar.innerText = "🟢 Map Active (Data Received)";
                     
                     if (markers[deviceId]) {
-                        // Smoothly move the existing marker position
                         markers[deviceId].setLatLng([lat, lon]);
                         markers[deviceId].getPopup().setContent(`<b>${name}</b> (${type})<br>Last Seen: ${lastUpdated}`);
                     } else {
-                        // Drop a brand new pin on the airfield map
                         markers[deviceId] = L.marker([lat, lon]).addTo(map)
                             .bindPopup(`<b>${name}</b> (${type})<br>Last Seen: ${lastUpdated}`);
+                        
+                        // Automatically center the view onto the phone's test location
+                        map.panTo([lat, lon]);
                     }
                 }
             } catch (e) {
-                console.error("Payload error:", e);
+                console.error("Parsing error", e);
             }
         });
     </script>
