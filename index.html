@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Driffield Cadet Tracking Map</title>
+    <!-- Leaflet CSS for Map Styling -->
     <link rel="stylesheet" href="https://unpkg.com" />
-    <script src="https://unpkg.com"></script>
     <style>
         body, html { margin: 0; padding: 0; height: 100%; width: 100%; font-family: sans-serif; }
         #map { height: 100%; width: 100%; }
@@ -19,11 +19,13 @@
 </head>
 <body>
 
-    <div id="status-bar" style="color: orange;">⏳ Initializing Connection...</div>
+    <div id="status-bar" style="color: orange;">⏳ Connecting to Platform...</div>
     <div id="map"></div>
 
+    <!-- Leaflet JS for Map Logic -->
     <script src="https://unpkg.com"></script>
     <script>
+        // Initialize map centered over Driffield Cadet Training Area
         const map = L.map('map').setView([54.0145, -0.4720], 14);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -33,64 +35,50 @@
         const markers = {};
         const statusBar = document.getElementById('status-bar');
 
-        // Connect to the public Meshtastic broker over secure port 443
-        const client = mqtt.connect('wss://mqtt.meshtastic.org:443', {
-            clientId: 'driffield_viewer_' + Math.random().toString(16).substr(2, 8),
-            keepalive: 60, reconnectPeriod: 1000
-        });
+        // INPUT YOUR THINGSPEAK CREDENTIALS HERE:
+        const channelId = "3526815"; 
+        const readApiKey = "RHMDATRBIO029GKN"; 
 
-        client.on('connect', () => {
-            statusBar.innerText = "🟢 Map Active (Waiting for Tags)";
-            statusBar.style.color = "green";
-            
-            // Subscribe to BOTH upcoming Meshtastic hardware and current OwnTracks phone apps
-            client.subscribe('driffield/cadets/+/location');
-            client.subscribe('owntracks/driffield/#');
-        });
+        function fetchTrackerData() {
+            const url = `https://thingspeak.com{channelId}/feeds.json?api_key=${readApiKey}&results=10`;
 
-        client.on('message', (topic, message) => {
-            try {
-                const data = JSON.parse(message.toString());
-                const topicParts = topic.split('/');
-                
-                let lat, lon, name, type, deviceId;
-
-                // Handle OwnTracks App Format
-                if (topicParts[0] === 'owntracks') {
-                    deviceId = topicParts[2] || 'staff_phone';
-                    lat = data.lat;
-                    lon = data.lon;
-                    name = "Staff: " + (deviceId.toUpperCase());
-                    type = "Staff";
-                } 
-                // Handle Meshtastic Hardware Format
-                else {
-                    deviceId = topicParts[2];
-                    lat = data.lat;
-                    lon = data.lon;
-                    name = data.name || deviceId;
-                    type = "Cadet";
-                }
-
-                if (lat && lon) {
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
                     const lastUpdated = new Date().toLocaleTimeString();
-                    statusBar.innerText = "🟢 Map Active (Data Received)";
-                    
-                    if (markers[deviceId]) {
-                        markers[deviceId].setLatLng([lat, lon]);
-                        markers[deviceId].getPopup().setContent(`<b>${name}</b> (${type})<br>Last Seen: ${lastUpdated}`);
-                    } else {
-                        markers[deviceId] = L.marker([lat, lon]).addTo(map)
-                            .bindPopup(`<b>${name}</b> (${type})<br>Last Seen: ${lastUpdated}`);
-                        
-                        // Automatically center the view onto the phone's test location
-                        map.panTo([lat, lon]);
-                    }
-                }
-            } catch (e) {
-                console.error("Parsing error", e);
-            }
-        });
+                    statusBar.innerText = "🟢 System Active (Refreshed: " + lastUpdated + ")";
+                    statusBar.style.color = "green";
+
+                    // Read the location feeds
+                    data.feeds.forEach(feed => {
+                        const lat = parseFloat(feed.field1);
+                        const lon = parseFloat(feed.field2);
+                        const name = feed.field3 || "Unknown Tag";
+                        const type = feed.field4 || "Tracker";
+                        const deviceId = name.replace(/\s+/g, '-').toLowerCase();
+
+                        if (!isNaN(lat) && !isNaN(lon)) {
+                            if (markers[deviceId]) {
+                                markers[deviceId].setLatLng([lat, lon]);
+                                markers[deviceId].getPopup().setContent(`<b>${name}</b> (${type})<br>Last Seen: ${lastUpdated}`);
+                            } else {
+                                markers[deviceId] = L.marker([lat, lon]).addTo(map)
+                                    .bindPopup(`<b>${name}</b> (${type})<br>Last Seen: ${lastUpdated}`);
+                                map.panTo([lat, lon]); // Centers map on the active pin
+                            }
+                        }
+                    });
+                })
+                .catch(error => {
+                    console.error("API Fetch Error:", error);
+                    statusBar.innerText = "🔴 API Connection Failed";
+                    statusBar.style.color = "red";
+                });
+        }
+
+        // Run instantly on launch, then update every 15 seconds
+        fetchTrackerData();
+        setInterval(fetchTrackerData, 15000);
     </script>
 </body>
 </html>
